@@ -1,0 +1,52 @@
+plugins {
+    id 'com.bmuschko.docker-remote-api' version '4.10.0'
+    id 'org.owasp.dependencycheck' version '5.1.0'
+}
+
+group = 'com.zoomint'
+
+def H2_RELEASE_DATE = '2019-03-13'
+def BUILD_DIR = new File(buildDir, 'nvd-container-resources')
+
+dependencyCheck {
+    cveValidForHours = 0
+
+    data {
+        directory = BUILD_DIR
+    }
+}
+
+task copyEntryPoint(type: Copy) {
+    from project.file('src/main/resources/docker-entrypoint.sh')
+    into BUILD_DIR
+}
+
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+import com.bmuschko.gradle.docker.tasks.image.Dockerfile
+
+task createDockerFile(type: Dockerfile, dependsOn: [copyEntryPoint, dependencyCheckUpdate]) {
+    from "adoptopenjdk/openjdk8:jdk8u212-b04-slim"
+    destFile = new File(BUILD_DIR, 'Dockerfile')
+    def H2_DATA_DIR = '/h2-data'
+
+    label(["maintainer": "ZOOM International, (c) 2002 ZOOM International"])
+
+    runCommand "curl http://www.h2database.com/h2-${H2_RELEASE_DATE}.zip -o h2.zip && jar xvf h2.zip && rm h2.zip"
+    runCommand "ln -s \$(ls /h2/bin/*jar) /h2/bin/h2.jar"
+    runCommand "mkdir -p ${H2_DATA_DIR}"
+    copyFile('odc.mv.db', "${H2_DATA_DIR}/odc.mv.db")
+
+    copyFile('docker-entrypoint.sh', '/docker-entrypoint.sh')
+    runCommand 'chmod u+x /docker-entrypoint.sh'
+    entryPoint "/docker-entrypoint.sh"
+
+    exposePort 8092, 9092
+    defaultCommand "java", "-Xmx512m", "-cp", "/h2/bin/h2.jar", "org.h2.tools.Server", "-web", "-webAllowOthers", "-tcp", "-tcpAllowOthers", "-baseDir", "${H2_DATA_DIR}"
+}
+
+task buildImage(type: DockerBuildImage) {
+    group = TASK_GROUP
+    dependsOn createDockerFile
+    inputDir = createDockerFile.destFile.get().asFile.parentFile
+    tags = ["nvd-container-gradle"]
+}
