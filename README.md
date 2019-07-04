@@ -8,3 +8,4 @@ Implementation notes
 ---
  * Built using [Gradle](https://gradle.org/) + [gradle-docker-plugin](https://github.com/bmuschko/gradle-docker-plugin)
  * Dataset is stored in [H2](https://www.h2database.com/html/main.html) database
+ * [Article describing the implementation](https://github.com/zoomint/nvd-container-image.git)
